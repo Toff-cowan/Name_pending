@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import type { MetaArgs } from "react-router";
 
 import { trpc } from "@/utils/trpc";
-
-import type { Route } from "./+types/_index";
 
 const TITLE_TEXT = `
  ██████╗ ███████╗████████╗████████╗███████╗██████╗
@@ -20,18 +19,19 @@ const TITLE_TEXT = `
     ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
  `;
 
-export function meta({}: Route.MetaArgs) {
+export function meta({}: MetaArgs) {
   return [
-    { title: "Name_Pending" },
-    { name: "description", content: "Name_Pending is a web application" },
+    { title: "Dashboard | Name_Pending" },
+    { name: "description", content: "Name_Pending dashboard" },
   ];
 }
 
-export default function Home() {
+export default function Dashboard() {
   const healthCheck = useQuery(trpc.healthCheck.queryOptions());
 
   return (
     <div className="container mx-auto max-w-3xl px-4 py-2">
+      <h1 className="sr-only">Dashboard</h1>
       <pre className="overflow-x-auto font-mono text-sm">{TITLE_TEXT}</pre>
       <div className="grid gap-6">
         <section className="rounded-lg border p-4">

@@ -25,7 +25,7 @@
   "devDependencies": {
     "@Name_Pending/config": "*",
     "@types/pg": "^8.16.0",
-    "drizzle-kit": "^0.31.8",
+    "drizzle-kit": "^0.18.1",
     "typescript": "^5"
   }
 }
