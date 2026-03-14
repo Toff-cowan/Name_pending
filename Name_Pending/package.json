@@ -2,7 +2,8 @@
   "name": "Name_Pending",
   "private": true,
   "workspaces": [
-    "apps/*",
+    "client",
+    "server",
     "packages/*"
   ],
   "type": "module",
