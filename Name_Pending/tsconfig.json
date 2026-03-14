@@ -1,0 +1,3 @@
+{
+  "extends": "@Name_Pending/config/tsconfig.base.json"
+}

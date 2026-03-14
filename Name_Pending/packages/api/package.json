@@ -1,0 +1,26 @@
+{
+  "name": "@Name_Pending/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@Name_Pending/db": "*",
+    "@Name_Pending/env": "*",
+    "@trpc/client": "^11.7.2",
+    "@trpc/server": "^11.7.2",
+    "dotenv": "^17.2.2",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@Name_Pending/config": "*",
+    "@types/express": "^5.0.1",
+    "typescript": "^5"
+  }
+}
