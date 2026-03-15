@@ -8,15 +8,15 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "check-types": "turbo check-types",
-    "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F server dev",
-    "db:push": "turbo -F @Name_Pending/db db:push",
-    "db:studio": "turbo -F @Name_Pending/db db:studio",
-    "db:generate": "turbo -F @Name_Pending/db db:generate",
-    "db:migrate": "turbo -F @Name_Pending/db db:migrate"
+    "dev": "npx turbo dev",
+    "build": "npx turbo build",
+    "check-types": "npx turbo check-types",
+    "dev:web": "npx turbo -F web dev",
+    "dev:server": "npx turbo -F server dev",
+    "db:push": "npx turbo -F @Name_Pending/db db:push",
+    "db:studio": "npx turbo -F @Name_Pending/db db:studio",
+    "db:generate": "npx turbo -F @Name_Pending/db db:generate",
+    "db:migrate": "npx turbo -F @Name_Pending/db db:migrate"
   },
   "dependencies": {
     "@Name_Pending/env": "*",
@@ -26,7 +26,7 @@
   "devDependencies": {
     "@Name_Pending/config": "*",
     "@types/node": "^22.13.14",
-    "turbo": "^2.8.12",
+    "turbo": "^2.8.17",
     "typescript": "^5"
   },
   "packageManager": "npm@10.9.2"
