@@ -1,5 +1,4 @@
 import { StockAnalyzer } from "@/components/stock-analyzer";
-import { RequireAuth } from "@/components/require-auth";
 import type { Route } from "./+types/analytics";
 
 
@@ -12,7 +11,6 @@ export function meta({}: Route.MetaArgs) {
 
 export default function Analytics() {
   return (
-    <RequireAuth>
     <div className="container mx-auto max-w-4xl px-4 py-6">
       <h1 className="mb-2 text-2xl font-semibold">Graphs & Analytics</h1>
       <p className="text-muted-foreground">
@@ -22,6 +20,5 @@ export default function Analytics() {
         <StockAnalyzer />
       </section>
     </div>
-    </RequireAuth>
   );
 }

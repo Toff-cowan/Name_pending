@@ -8,7 +8,6 @@ import { trpc } from "@/utils/trpc";
 import type { Route } from "./+types/market";
 import type { MarketRow, NewsItem } from "@pi/api/routers/index";
 import type { OHLC } from "@pi/api/routers/index";
-import { RequireAuth } from "@/components/require-auth";
 import "@/styles/market.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -487,7 +486,6 @@ export default function MarketDetails() {
   const historyData = historyQuery.data?.ok ? historyQuery.data.data : [];
 
   return (
-    <RequireAuth>
     <div className={`market-dashboard ${initialHighlight ? "initial-highlight" : ""}`}>
       <header className="market-header">
         <div>
@@ -801,7 +799,6 @@ export default function MarketDetails() {
         />
       )}
     </div>
-    </RequireAuth>
   );
 }
 
