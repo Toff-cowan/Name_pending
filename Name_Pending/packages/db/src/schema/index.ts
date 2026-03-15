@@ -54,6 +54,29 @@ export const newsEvents = pgTable(
   ],
 );
 
+export const derivedFeatures = pgTable(
+  "derived_features",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    symbol: text("symbol").notNull(),
+    timeframe: text("timeframe").notNull(),
+    ts: timestamp("ts", { withTimezone: true }).notNull(),
+    feature: text("feature").notNull(),
+    value: numeric("value", { precision: 30, scale: 16 }).notNull(),
+    source: text("source").notNull().default("engine"),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("derived_features_symbol_tf_ts_feature_uq").on(
+      t.symbol,
+      t.timeframe,
+      t.ts,
+      t.feature,
+    ),
+    index("derived_features_symbol_ts_idx").on(t.symbol, t.ts),
+  ],
+);
+
 export const ingestionCheckpoints = pgTable(
   "ingestion_checkpoints",
   {

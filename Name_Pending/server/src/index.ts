@@ -7,6 +7,7 @@ import express from "express";
 
 import { createDefaultProviders } from "./ingestion/adapters";
 import { startIngestionWorkers } from "./ingestion/workers";
+import { startFeatureWorker } from "./features/workers";
 
 const app = express();
 
@@ -32,14 +33,17 @@ app.get("/", (_req, res) => {
 });
 
 const stopIngestionWorkers = startIngestionWorkers(createDefaultProviders());
+const stopFeatureWorker = startFeatureWorker();
 
 process.on("SIGINT", () => {
   stopIngestionWorkers();
+  stopFeatureWorker();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
   stopIngestionWorkers();
+  stopFeatureWorker();
   process.exit(0);
 });
 

@@ -13,7 +13,7 @@ interface WorkerDependencies {
 interface CheckpointArgs {
   source: string;
   streamKey: string;
-  cursor?: string;
+  cursor?: string | null;
   healthy: boolean;
   error?: string;
 }

@@ -9,6 +9,8 @@ import {
   newsItemSchema,
   type NewsProvider,
 } from "./types";
+import { AlphaVantageMarketProvider } from "./alphavantage";
+import { MockMarketProvider, MockNewsProvider } from "./mock";
 
 interface HttpProviderOptions {
   baseUrl: string;
@@ -170,12 +172,24 @@ export class HttpNewsProvider implements NewsProvider {
 }
 
 export function createDefaultProviders() {
+  if (env.USE_MOCK_DATA) {
+    return {
+      marketProvider: new MockMarketProvider(),
+      newsProvider: new MockNewsProvider(),
+    };
+  }
+
+  const marketProvider =
+    env.MARKET_DATA_PROVIDER === "alphavantage"
+      ? new AlphaVantageMarketProvider(env.MARKET_DATA_API_KEY, env.MARKET_DATA_API_URL)
+      : new HttpMarketProvider({
+          baseUrl: env.MARKET_DATA_API_URL,
+          apiKey: env.MARKET_DATA_API_KEY,
+          source: "market-http",
+        });
+
   return {
-    marketProvider: new HttpMarketProvider({
-      baseUrl: env.MARKET_DATA_API_URL,
-      apiKey: env.MARKET_DATA_API_KEY,
-      source: "market-http",
-    }),
+    marketProvider,
     newsProvider: new HttpNewsProvider({
       baseUrl: env.NEWS_API_URL,
       apiKey: env.NEWS_API_KEY,
