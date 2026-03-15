@@ -3,10 +3,10 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "build": "tsdown",
+    "build": "npx tsdown",
     "check-types": "tsc -b",
     "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
-    "dev": "tsx watch src/index.ts",
+    "dev": "npx tsx watch src/index.ts",
     "start": "node dist/index.mjs",
     "scrape:jse": "python scripts/scrape_jamstockex.py"
   },
