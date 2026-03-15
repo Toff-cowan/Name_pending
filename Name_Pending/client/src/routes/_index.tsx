@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { MetaArgs } from "react-router";
 
 import { trpc } from "@/utils/trpc";
@@ -9,6 +10,40 @@ import { Watchlist } from "@/components/dashboard/watchlist";
 import { NewsFeed } from "@/components/dashboard/news-feed";
 import { ChatbotButton } from "@/components/dashboard/chatbot-button";
 
+function ScrollReveal({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let root: Element | null = null;
+    let p: HTMLElement | null = el.parentElement;
+    while (p) {
+      const o = getComputedStyle(p).overflowY;
+      if (o === "auto" || o === "scroll") {
+        root = p;
+        break;
+      }
+      p = p.parentElement;
+    }
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) setRevealed(true);
+      },
+      { threshold: 0.08, rootMargin: "0px 0px -30px 0px", root: root ?? undefined }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className={`scroll-reveal ${revealed ? "revealed" : ""}`}>
+      {children}
+    </div>
+  );
+}
+
 export function meta({}: MetaArgs) {
   return [
     { title: "Dashboard | PI - Predictive Investments" },
@@ -17,7 +52,6 @@ export function meta({}: MetaArgs) {
 }
 
 export default function Dashboard() {
-  const healthCheck = useQuery(trpc.healthCheck.queryOptions());
   const marketQuery = useQuery(trpc.getMarketData.queryOptions());
   const scrapedAt =
     marketQuery.data?.ok && marketQuery.data.scrapedAt
@@ -29,16 +63,16 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-full bg-background">
-      {/* Full-width hero: image with PI centered, floating + glow */}
-      <section className="relative w-full min-h-[320px] sm:min-h-[380px] md:min-h-[420px]">
-        <div className="absolute inset-0">
+      {/* Full-width hero: image with PI centered (no float), theme glow */}
+      <section className="relative w-full min-h-[320px] sm:min-h-[380px] md:min-h-[420px] bg-muted">
+        <div className="absolute inset-0 flex items-center justify-center">
           <img
             src="https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=1200&q=80"
             alt=""
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             role="presentation"
           />
-          <div className="absolute inset-0 bg-foreground/40" aria-hidden />
+          <div className="absolute inset-0 bg-foreground/30 pointer-events-none" aria-hidden />
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
           <h1 className="hero-pi-title text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl lg:text-8xl">
@@ -51,45 +85,36 @@ export default function Dashboard() {
               <span className="font-semibold">Predictive Investments</span>
               <span className="ml-2 text-background/80">· Dashboard</span>
             </div>
-            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-background/90">
-              {healthCheck.data !== undefined && (
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      healthCheck.data ? "bg-success" : "bg-destructive"
-                    }`}
-                    aria-hidden
-                  />
-                  API {healthCheck.data ? "Connected" : "Disconnected"}
-                </span>
-              )}
-              {scrapedAt && (
-                <span>Market data as of {scrapedAt}</span>
-              )}
-            </div>
+            {scrapedAt && (
+              <span className="text-background/90">Market data as of {scrapedAt}</span>
+            )}
           </div>
         </div>
       </section>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Win/Loss Chart - Featured at top */}
-        <WinLossChart />
+        <ScrollReveal>
+          <WinLossChart />
+        </ScrollReveal>
 
-        {/* Summary Cards */}
-        <div className="mt-6">
-          <SummaryCards />
-        </div>
+        <ScrollReveal>
+          <div className="mt-6">
+            <SummaryCards />
+          </div>
+        </ScrollReveal>
 
-        {/* Performance Chart - Full width */}
-        <div className="mt-6">
-          <PerformanceChart />
-        </div>
+        <ScrollReveal>
+          <div className="mt-6">
+            <PerformanceChart />
+          </div>
+        </ScrollReveal>
 
-        {/* Secondary Content Grid */}
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Watchlist />
-          <NewsFeed />
-        </div>
+        <ScrollReveal>
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Watchlist />
+            <NewsFeed />
+          </div>
+        </ScrollReveal>
       </main>
 
       <ChatbotButton />

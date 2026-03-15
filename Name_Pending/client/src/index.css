@@ -47,31 +47,25 @@ main::-webkit-scrollbar,
   transform: translateY(-2px);
 }
 
-/* Hero PI floating + glow */
-@keyframes hero-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
+/* Hero PI: theme color + glow (no white, no float) */
 .hero-pi-title {
-  animation: hero-float 4s ease-in-out infinite;
-  color: white;
+  color: var(--foreground);
   text-shadow:
-    0 0 20px rgba(255, 255, 255, 0.6),
-    0 0 40px rgba(255, 255, 255, 0.4),
-    0 0 60px rgba(255, 255, 255, 0.3);
-  filter: drop-shadow(0 0 24px rgba(255, 255, 255, 0.5));
+    0 0 20px color-mix(in oklch, var(--accent) 50%, transparent),
+    0 0 40px color-mix(in oklch, var(--accent) 30%, transparent);
+  filter: drop-shadow(0 0 20px color-mix(in oklch, var(--accent) 40%, transparent));
 }
 
-.dark .hero-pi-title {
-  text-shadow:
-    0 0 20px rgba(255, 255, 255, 0.5),
-    0 0 40px rgba(255, 255, 255, 0.35),
-    0 0 80px rgba(255, 255, 255, 0.25);
-  filter: drop-shadow(0 0 32px rgba(255, 255, 255, 0.4));
+/* Scroll-in: content floats in as you scroll */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(1.25rem);
+  transition:
+    opacity 0.5s ease-out,
+    transform 0.5s ease-out;
+}
+
+.scroll-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
 }
