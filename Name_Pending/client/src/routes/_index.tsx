@@ -68,7 +68,7 @@ export default function Dashboard() {
         <section className="relative mb-8 flex flex-col overflow-hidden rounded-2xl border border-border bg-card md:flex-row">
           <div className="relative z-10 flex flex-1 flex-col justify-center px-6 py-10 sm:px-8 sm:py-12 md:px-10 lg:py-14">
             <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl md:text-5xl">
-              Dashboard
+              PI – Predictive Investment
             </h1>
             <p className="mt-2 max-w-xl text-base text-muted-foreground sm:text-lg">
               Welcome back! Here&apos;s your portfolio overview.
