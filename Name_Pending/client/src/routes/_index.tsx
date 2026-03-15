@@ -2,22 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import type { MetaArgs } from "react-router";
 
 import { trpc } from "@/utils/trpc";
-
-const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
-
- ████████╗    ███████╗████████╗ █████╗  ██████╗██╗  ██╗
- ╚══██╔══╝    ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
-    ██║       ███████╗   ██║   ███████║██║     █████╔╝
-    ██║       ╚════██║   ██║   ██╔══██║██║     ██╔═██╗
-    ██║       ███████║   ██║   ██║  ██║╚██████╗██║  ██╗
-    ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
- `;
+import { SummaryCards } from "@/components/dashboard/summary-cards";
+import { WinLossChart } from "@/components/dashboard/win-loss-chart";
+import { PerformanceChart } from "@/components/dashboard/performance-chart";
+import { Watchlist } from "@/components/dashboard/watchlist";
+import { NewsFeed } from "@/components/dashboard/news-feed";
+import { ChatbotButton } from "@/components/dashboard/chatbot-button";
 
 export function meta({}: MetaArgs) {
   return [
@@ -28,28 +18,55 @@ export function meta({}: MetaArgs) {
 
 export default function Dashboard() {
   const healthCheck = useQuery(trpc.healthCheck.queryOptions());
+  const marketQuery = useQuery(trpc.getMarketData.queryOptions());
+  const scrapedAt =
+    marketQuery.data?.ok && marketQuery.data.scrapedAt
+      ? new Date(marketQuery.data.scrapedAt).toLocaleString(undefined, {
+          dateStyle: "short",
+          timeStyle: "short",
+        })
+      : null;
 
   return (
-    <div className="container mx-auto max-w-3xl px-4 py-2">
-      <h1 className="sr-only">Dashboard</h1>
-      <pre className="overflow-x-auto font-mono text-sm">{TITLE_TEXT}</pre>
-      <div className="grid gap-6">
-        <section className="rounded-lg border p-4">
-          <h2 className="mb-2 font-medium">API Status</h2>
-          <div className="flex items-center gap-2">
-            <div
-              className={`h-2 w-2 rounded-full ${healthCheck.data ? "bg-green-500" : "bg-red-500"}`}
-            />
-            <span className="text-sm text-muted-foreground">
-              {healthCheck.isLoading
-                ? "Checking..."
-                : healthCheck.data
-                  ? "Connected"
-                  : "Disconnected"}
-            </span>
+    <div className="min-h-full bg-background">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Welcome back! Here&apos;s your portfolio overview.
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {healthCheck.data !== undefined && (
+              <span>API: {healthCheck.data ? "Connected" : "Disconnected"}</span>
+            )}
+            {scrapedAt && (
+              <span>Market data as of {scrapedAt}</span>
+            )}
           </div>
-        </section>
-      </div>
+        </div>
+
+        {/* Win/Loss Chart - Featured at top */}
+        <WinLossChart />
+
+        {/* Summary Cards */}
+        <div className="mt-6">
+          <SummaryCards />
+        </div>
+
+        {/* Performance Chart - Full width */}
+        <div className="mt-6">
+          <PerformanceChart />
+        </div>
+
+        {/* Secondary Content Grid */}
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Watchlist />
+          <NewsFeed />
+        </div>
+      </main>
+
+      <ChatbotButton />
     </div>
   );
 }

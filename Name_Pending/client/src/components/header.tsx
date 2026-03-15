@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
+import {
+  LayoutDashboard,
+  Newspaper,
+  LineChart,
+  MessageCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { ModeToggle } from "./mode-toggle";
 
 const SCROLL_THRESHOLD = 60;
+
+const links: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/market", label: "Market & News", icon: Newspaper },
+  { to: "/analytics", label: "Graphs & Analytics", icon: LineChart },
+  { to: "/lab", label: "Chat", icon: MessageCircle },
+];
 
 export default function Header({
   scrollRef,
@@ -11,13 +25,6 @@ export default function Header({
 }) {
   const [hidden, setHidden] = useState(false);
   const lastScrollTop = useRef(0);
-
-  const links = [
-    { to: "/", label: "Dashboard" },
-    { to: "/market", label: "Market & News" },
-    { to: "/analytics", label: "Graphs & Analytics" },
-    { to: "/lab", label: "Chat" },
-  ] as const;
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -37,19 +44,21 @@ export default function Header({
 
   return (
     <header
-      className={`app-header fixed left-0 right-0 top-0 z-50 flex items-center justify-end gap-4 bg-transparent px-4 py-3 transition-transform duration-300 ${hidden ? "-translate-y-full" : "translate-y-0"}`}
+      className={`app-header fixed left-0 right-0 top-0 z-50 flex items-center justify-end gap-2 bg-transparent px-4 py-3 transition-transform duration-300 sm:gap-4 ${hidden ? "-translate-y-full" : "translate-y-0"}`}
     >
-      <nav className="flex items-center gap-4 text-lg">
-        {links.map(({ to, label }) => (
+      <nav className="flex items-center gap-2 text-lg sm:gap-4">
+        {links.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
+            aria-label={label}
             className={({ isActive }) =>
-              `font-medium transition-colors hover:text-accent-foreground ${isActive ? "text-accent-foreground" : "text-foreground/80"}`
+              `flex items-center gap-1.5 rounded-md p-2 font-medium transition-colors hover:text-accent-foreground md:p-1.5 md:px-2 ${isActive ? "text-accent-foreground" : "text-foreground/80"}`
             }
             end
           >
-            {label}
+            <Icon className="h-5 w-5 shrink-0 md:mr-1" aria-hidden />
+            <span className="hidden md:inline">{label}</span>
           </NavLink>
         ))}
       </nav>
