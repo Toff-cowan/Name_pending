@@ -11,20 +11,15 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { useRef } from "react";
 
 import type { Route } from "./+types/root";
+import BackToTop from "./components/back-to-top";
 import Header from "./components/header";
 import { ThemeProvider } from "./components/theme-provider";
 import { queryClient } from "./utils/trpc";
 
-export const links: Route.LinksFunction = () => [
-  { rel: "preconnect", href: "https://fonts.googleapis.com" },
-  { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-  {
-    rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
-  },
-];
+export const links: Route.LinksFunction = () => [];
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -45,6 +40,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider
@@ -53,9 +50,12 @@ export default function App() {
         disableTransitionOnChange
         storageKey="vite-ui-theme"
       >
-        <div className="grid grid-rows-[auto_1fr] h-svh">
+        <div className="grid h-svh w-full grid-rows-[auto_1fr] overflow-hidden">
           <Header />
-          <Outlet />
+          <main ref={mainScrollRef} className="min-h-0 overflow-auto bg-background">
+            <Outlet />
+          </main>
+          <BackToTop scrollRef={mainScrollRef} />
         </div>
         <Toaster richColors />
       </ThemeProvider>
