@@ -628,7 +628,21 @@ export default function MarketDetails() {
           <p className="text-sm text-muted-foreground">Failed: {marketQuery.data.error}</p>
         )}
 
-        {marketQuery.data?.ok && viewMode === "cards" && (
+        {marketQuery.data?.ok && rows.length === 0 && !marketQuery.isLoading && (
+          <div className="rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-8 text-center">
+            <p className="font-medium">No market data available</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The server has no market data loaded. If this is a deployed backend (e.g. Render), ensure the data directory{" "}
+              <code className="rounded bg-muted px-1">server/scripts/yahoo_top_100_output</code> exists and contains{" "}
+              <code className="rounded bg-muted px-1">top_100_summary.csv</code> (or run the scraper to generate it).
+            </p>
+            {marketQuery.data.source && (
+              <p className="mt-2 text-xs text-muted-foreground">Server looked for: {marketQuery.data.source}</p>
+            )}
+          </div>
+        )}
+
+        {marketQuery.data?.ok && rows.length > 0 && viewMode === "cards" && (
           <div
             className="market-cards-grid-wrap"
             onMouseMove={(e) => {
@@ -680,7 +694,7 @@ export default function MarketDetails() {
           </div>
         )}
 
-        {marketQuery.data?.ok && viewMode === "table" && (
+        {marketQuery.data?.ok && rows.length > 0 && viewMode === "table" && (
           <div className="market-table-wrap">
             <table className="market-table">
               <thead>

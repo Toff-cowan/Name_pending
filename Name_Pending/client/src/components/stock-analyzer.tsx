@@ -618,6 +618,12 @@ export function StockAnalyzer() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {marketRows.length === 0 && availableSymbols.length === 0 && !marketQuery.isLoading && availableSymbolsQuery.isSuccess && (
+            <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+              No symbols from server. Using sample list only; history and predictions may fail until the backend has{" "}
+              <code className="text-xs">yahoo_top_100_output</code> data.
+            </p>
+          )}
           <div className="grid gap-6 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="analyzer-symbol">Stock Symbol</Label>

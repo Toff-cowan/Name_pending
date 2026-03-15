@@ -10,7 +10,8 @@ import path from "node:path";
 
 const app = express();
 
-const allowedOrigins: string[] = env.CORS_ORIGIN;
+const allowedOrigins = env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean);
+if (allowedOrigins.length === 0) allowedOrigins.push("http://localhost:5173");
 app.use(
   cors({
     origin: (origin, cb) => {
