@@ -2,9 +2,9 @@
  * Stock Prediction Analyzer for the Analytics page.
  * Analyze a stock: set symbol, time horizon, run prediction, compare actual vs predicted (mirror overlay).
  */
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Area, Legend } from "recharts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Area, Legend, Brush, ResponsiveContainer } from "recharts";
 import { trpc } from "@/utils/trpc";
 import type {
   OHLC,
@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/select";
 import { env } from "@Name_Pending/env/web";
-import { Target, BarChart3, CheckCircle2, AlertCircle, Layers, TrendingUp, TrendingDown, Loader2, Download, Copy } from "lucide-react";
+import { Target, BarChart3, CheckCircle2, Info, Layers, TrendingUp, TrendingDown, Loader2, Download, Copy } from "lucide-react";
 
 const FALLBACK_STOCK_OPTIONS = [
   { value: "AAPL", label: "AAPL - Apple" },
@@ -45,29 +45,51 @@ const FORECAST_OPTIONS = [
 
 const BOUND_PERCENT = 0.025;
 
+type ComparisonRow = { date: string; predicted: number; actual: number };
+
 function buildAnalyzeChartData(
   actual: OHLC[],
   predicted: PredictionPoint[],
-  mapePercent?: number
+  mapePercent?: number,
+  comparisonRows?: ComparisonRow[]
 ) {
   const toDate = (d: string) => (d.split(" ")[0] ?? d).trim();
   const band = mapePercent != null ? mapePercent / 100 : BOUND_PERCENT;
-  const historical = actual.map((d) => ({
-    date: toDate(d.date),
-    actual: d.close,
-    predicted: null as number | null,
-    upperBound: null as number | null,
-    lowerBound: null as number | null,
-    actualFuture: null as number | null,
-  }));
+  const sortedComparison =
+    comparisonRows?.length ?
+      [...comparisonRows].sort((a, b) => toDate(a.date).localeCompare(toDate(b.date)))
+    : [];
+  const comparisonByDate =
+    sortedComparison.length > 0
+      ? new Map(sortedComparison.map((r) => [toDate(r.date), r]))
+      : null;
+
+  const historical = actual.map((d) => {
+    const date = toDate(d.date);
+    const comp = comparisonByDate?.get(date);
+    const pred = comp?.predicted ?? null;
+    const upper = pred != null ? pred * (1 + band) : null;
+    const lower = pred != null ? pred * (1 - band) : null;
+    return {
+      date,
+      actual: d.close,
+      predicted: pred as number | null,
+      upperBound: upper as number | null,
+      lowerBound: lower as number | null,
+      actualFuture: (comp?.actual ?? null) as number | null,
+    };
+  });
+
+  const firstComparisonDate = sortedComparison.length > 0 ? toDate(sortedComparison[0].date) : null;
+  const lastActualDate = firstComparisonDate ?? (actual.length > 0 ? toDate(actual[actual.length - 1].date) : null);
+
   const actualByDate = new Map(actual.map((d) => [toDate(d.date), d.close]));
-  const lastActualDate = actual.length > 0 ? toDate(actual[actual.length - 1].date) : null;
   const future = predicted.map((p) => {
     const date = toDate(p.date);
     const pred = p.predictedClose;
     const upper = pred * (1 + band);
     const lower = pred * (1 - band);
-    const actualFuture = actualByDate.get(date) ?? null;
+    const actualFuture = actualByDate.get(date) ?? (comparisonByDate?.get(date)?.actual ?? null);
     return {
       date,
       actual: null as number | null,
@@ -77,6 +99,7 @@ function buildAnalyzeChartData(
       actualFuture,
     };
   });
+
   return { combined: [...historical, ...future], lastActualDate };
 }
 
@@ -89,6 +112,7 @@ function AnalyzeChartRecharts({
   accuracy = null,
   showConfidenceBands = true,
   showMirrorOverlay = true,
+  comparisonRows = [],
 }: {
   actual: OHLC[];
   predicted: PredictionPoint[];
@@ -98,13 +122,36 @@ function AnalyzeChartRecharts({
   accuracy?: PredictionAccuracy | null;
   showConfidenceBands?: boolean;
   showMirrorOverlay?: boolean;
+  comparisonRows?: ComparisonRow[];
 }) {
   const mape = accuracy?.mape;
   const { combined, lastActualDate } = useMemo(
-    () => buildAnalyzeChartData(actual, predicted, mape),
-    [actual, predicted, mape]
+    () => buildAnalyzeChartData(actual, predicted, mape, comparisonRows),
+    [actual, predicted, mape, comparisonRows]
   );
   const hasActualFuture = combined.some((d) => d.actualFuture != null);
+
+  const n = combined.length;
+  const [zoomRange, setZoomRange] = useState<{ start: number; end: number } | null>(null);
+  const lastIndex = Math.max(0, n - 1);
+  const zoomStart = Math.min(Math.max(0, zoomRange?.start ?? 0), lastIndex);
+  const zoomEnd = Math.min(Math.max(zoomStart, zoomRange?.end ?? lastIndex), lastIndex);
+  const visibleData = useMemo(
+    () => (n === 0 ? [] : combined.slice(zoomStart, zoomEnd + 1)),
+    [combined, zoomStart, zoomEnd, n]
+  );
+  const handleBrushChange = (range: { startIndex?: number; endIndex?: number } | null) => {
+    if (range == null || range.startIndex == null || range.endIndex == null) {
+      setZoomRange(null);
+      return;
+    }
+    setZoomRange({ start: range.startIndex, end: range.endIndex });
+  };
+  const canZoom = n > 10;
+  const isZoomed = canZoom && zoomRange != null && (zoomRange.start > 0 || zoomRange.end < lastIndex);
+  useEffect(() => {
+    setZoomRange(null);
+  }, [symbol]);
 
   return (
     <Card className="rounded-lg border bg-card">
@@ -117,7 +164,35 @@ function AnalyzeChartRecharts({
           <span className="inline-flex items-center rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium">
             Comparison Mode
           </span>
-          <span>Historical data with {forecastDays}-day prediction ({showMirrorOverlay ? "Overlay Enabled" : "Overlay off"})</span>
+          {accuracy != null && (
+            <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50/50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+              Model learns from backtest
+            </span>
+          )}
+          {canZoom && (
+            <span className="text-muted-foreground text-xs">
+              Drag the range bar below to zoom
+              {isZoomed && (
+                <>
+                  {" · "}
+                  <button
+                    type="button"
+                    className="underline hover:no-underline"
+                    onClick={() => setZoomRange(null)}
+                  >
+                    Reset zoom
+                  </button>
+                </>
+              )}
+            </span>
+          )}
+          <span>
+            Historical data with {forecastDays}-day prediction
+            {showMirrorOverlay && " (Overlay on)"}
+            {!showMirrorOverlay && " (Overlay off)"}
+            {showConfidenceBands && " · Bands on"}
+            {!showConfidenceBands && " · Bands off"}
+          </span>
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -125,13 +200,121 @@ function AnalyzeChartRecharts({
           config={{
             actual: { label: "Historical Price", color: "#3b82f6" },
             predicted: { label: "Predicted Price", color: "#f59e0b" },
-            upperBound: { label: "Upper Bound", color: "#f59e0b" },
-            lowerBound: { label: "Lower Bound", color: "#f59e0b" },
             actualFuture: { label: "Actual Future", color: "#22c55e" },
+            confidenceBand: { label: "Confidence Band", color: "#f59e0b" },
           }}
           className="w-full"
-          style={{ height }}
+          style={{ height: canZoom ? height + 72 : height }}
         >
+          {canZoom ? (
+            <div className="flex h-full w-full flex-col">
+              <div className="min-h-0 flex-1" style={{ minHeight: height }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={visibleData} margin={{ top: 12, right: 20, left: 12, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                  <XAxis
+                    dataKey="date"
+                    tickFormatter={(v: string) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    domain={["dataMin - 10", "dataMax + 10"]}
+                    tickFormatter={(v: number) => `$${Number(v).toFixed(2)}`}
+                  />
+                  <ChartTooltip
+                    content={<ChartTooltipContent />}
+                    labelFormatter={(v: string) =>
+                      new Date(v).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    }
+                    formatter={(value: unknown) => (typeof value === "number" ? `$${value.toFixed(2)}` : String(value))}
+                  />
+                  {lastActualDate && visibleData.some((d) => d.date === lastActualDate) && (
+                    <ReferenceLine
+                      x={lastActualDate}
+                      stroke="#6b7280"
+                      strokeDasharray="5 5"
+                      label={{ value: "Forecast Start", position: "top", fill: "#6b7280", fontSize: 10 }}
+                    />
+                  )}
+                  <Area
+                    type="stepAfter"
+                    dataKey="upperBound"
+                    baseValue={(entry: { lowerBound?: number | null; upperBound?: number | null }) =>
+                      entry?.lowerBound ?? entry?.upperBound ?? 0
+                    }
+                    stroke="none"
+                    fill="#f59e0b"
+                    fillOpacity={showConfidenceBands ? 0.18 : 0}
+                    isAnimationActive={false}
+                    name="Confidence Band"
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey="actual"
+                    stroke="#3b82f6"
+                    strokeWidth={2.5}
+                    dot={false}
+                    name="Historical Price"
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey="predicted"
+                    stroke="#f59e0b"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    strokeOpacity={showMirrorOverlay ? 1 : 0}
+                    dot={showMirrorOverlay ? { fill: "#f59e0b", r: 3 } : false}
+                    name="Predicted Price"
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey="actualFuture"
+                    stroke="#22c55e"
+                    strokeWidth={1.5}
+                    strokeDasharray="5 5"
+                    strokeOpacity={showMirrorOverlay ? 1 : 0}
+                    dot={showMirrorOverlay ? { fill: "#22c55e", r: 3 } : false}
+                    name="Actual Future"
+                    connectNulls={false}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={40}
+                    wrapperStyle={{ paddingTop: 8 }}
+                    formatter={(value) => (
+                      <span className="text-muted-foreground text-xs">
+                        {value === "Historical Price" ? "— " : value === "Confidence Band" ? "▢ " : "—○— "}
+                        {value}
+                      </span>
+                    )}
+                  />
+                </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="h-[72px] w-full shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={combined} margin={{ top: 4, right: 20, left: 12, bottom: 0 }}>
+                  <XAxis dataKey="date" tickFormatter={(v: string) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                  <YAxis hide domain={["auto", "auto"]} />
+                  <Line type="linear" dataKey="actual" stroke="#3b82f6" strokeWidth={1} dot={false} />
+                  <Brush
+                    dataKey="date"
+                    height={32}
+                    stroke="#f59e0b"
+                    fill="transparent"
+                    startIndex={zoomStart}
+                    endIndex={zoomEnd}
+                    onChange={handleBrushChange}
+                    tickFormatter={(v: string) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  />
+                </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ) : (
           <ComposedChart data={combined} margin={{ top: 12, right: 20, left: 12, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis
@@ -141,7 +324,7 @@ function AnalyzeChartRecharts({
             />
             <YAxis
               domain={["dataMin - 10", "dataMax + 10"]}
-              tickFormatter={(v: number) => `$${Number(v).toFixed(0)}`}
+              tickFormatter={(v: number) => `$${Number(v).toFixed(2)}`}
             />
             <ChartTooltip
               content={<ChartTooltipContent />}
@@ -158,82 +341,63 @@ function AnalyzeChartRecharts({
                 label={{ value: "Forecast Start", position: "top", fill: "#6b7280", fontSize: 10 }}
               />
             )}
-            {showConfidenceBands && (
-              <>
-                <Area
-                  type="monotone"
-                  dataKey="upperBound"
-                  baseValue={(entry: { lowerBound?: number | null }) => entry?.lowerBound ?? 0}
-                  stroke="none"
-                  fill="#f59e0b"
-                  fillOpacity={0.2}
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="upperBound"
-                  stroke="#f59e0b"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  dot={{ fill: "#f59e0b", r: 2 }}
-                  name="Upper Bound"
-                  connectNulls={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="lowerBound"
-                  stroke="#f59e0b"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  dot={{ fill: "#f59e0b", r: 2 }}
-                  name="Lower Bound"
-                  connectNulls={false}
-                />
-              </>
-            )}
+            <Area
+              type="stepAfter"
+              dataKey="upperBound"
+              baseValue={(entry: { lowerBound?: number | null; upperBound?: number | null }) =>
+                entry?.lowerBound ?? entry?.upperBound ?? 0
+              }
+              stroke="none"
+              fill="#f59e0b"
+              fillOpacity={showConfidenceBands ? 0.18 : 0}
+              isAnimationActive={false}
+              name="Confidence Band"
+              connectNulls={false}
+            />
             <Line
-              type="monotone"
+              type="linear"
               dataKey="actual"
               stroke="#3b82f6"
-              strokeWidth={2}
+              strokeWidth={2.5}
               dot={false}
               name="Historical Price"
               connectNulls={false}
             />
-            {showMirrorOverlay && (
-              <>
-                <Line
-                  type="monotone"
-                  dataKey="predicted"
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  dot={{ fill: "#f59e0b", r: 3 }}
-                  name="Predicted Price"
-                  connectNulls={false}
-                />
-                {hasActualFuture && (
-                  <Line
-                    type="monotone"
-                    dataKey="actualFuture"
-                    stroke="#22c55e"
-                    strokeWidth={2}
-                    dot={{ fill: "#22c55e", r: 3 }}
-                    name="Actual Future"
-                    connectNulls={false}
-                  />
-                )}
-              </>
-            )}
+            <Line
+              type="linear"
+              dataKey="predicted"
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              strokeDasharray="5 5"
+              strokeOpacity={showMirrorOverlay ? 1 : 0}
+              dot={showMirrorOverlay ? { fill: "#f59e0b", r: 3 } : false}
+              name="Predicted Price"
+              connectNulls={false}
+            />
+            <Line
+              type="linear"
+              dataKey="actualFuture"
+              stroke="#22c55e"
+              strokeWidth={1.5}
+              strokeDasharray="5 5"
+              strokeOpacity={showMirrorOverlay ? 1 : 0}
+              dot={showMirrorOverlay ? { fill: "#22c55e", r: 3 } : false}
+              name="Actual Future"
+              connectNulls={false}
+            />
             <Legend
               verticalAlign="bottom"
-              height={36}
+              height={40}
+              wrapperStyle={{ paddingTop: 8 }}
               formatter={(value) => (
                 <span className="text-muted-foreground text-xs">
-                  {value === "Upper Bound" || value === "Lower Bound" ? `-- ${value}` : `- ${value}`}
+                  {value === "Historical Price" ? "— " : value === "Confidence Band" ? "▢ " : "—○— "}
+                  {value}
                 </span>
               )}
             />
           </ComposedChart>
+          )}
         </ChartContainer>
       </CardContent>
     </Card>
@@ -251,6 +415,10 @@ export function StockAnalyzer() {
   const [forecastRequest, setForecastRequest] = useState<{ symbol: string; days: number } | null>(null);
   const [mirrorOverlay, setMirrorOverlay] = useState(true);
   const [confidenceBands, setConfidenceBands] = useState(true);
+  const [dataTab, setDataTab] = useState<"predicted" | "comparison">("predicted");
+  const [compareLoading, setCompareLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const comparisonResultRef = useRef<HTMLDivElement>(null);
 
   const marketQuery = useQuery({
     ...trpc.getMarketData.queryOptions(),
@@ -258,12 +426,8 @@ export function StockAnalyzer() {
   const availableSymbolsQuery = useQuery({
     ...trpc.getAvailableSymbols.queryOptions(),
   });
-  const dataStatusQuery = useQuery({
-    ...trpc.getDataStatus.queryOptions(),
-  });
   const marketRows: MarketRow[] = marketQuery.data?.ok ? marketQuery.data.rows : [];
   const availableSymbols: string[] = availableSymbolsQuery.data?.ok ? availableSymbolsQuery.data.symbols : [];
-  const dataStatus = dataStatusQuery.data;
   const stockOptions = useMemo(() => {
     if (marketRows.length > 0) {
       return marketRows
@@ -300,6 +464,19 @@ export function StockAnalyzer() {
   });
   const apiPredictions: PredictionPoint[] = predictionQuery.data?.ok ? predictionQuery.data.predictions : [];
   const accuracy: PredictionAccuracy | null = predictionQuery.data?.ok ? predictionQuery.data.accuracy ?? null : null;
+  const apiComparison =
+    (predictionQuery.data?.ok && (predictionQuery.data as { comparison?: unknown[] }).comparison) ?? [];
+  const apiComparisonRows = Array.isArray(apiComparison)
+    ? apiComparison.filter(
+        (r): r is { date: string; predictedClose: number; actualClose: number } =>
+          r != null &&
+          typeof (r as { date?: unknown }).date === "string" &&
+          typeof (r as { predictedClose?: unknown }).predictedClose === "number" &&
+          Number.isFinite((r as { predictedClose: number }).predictedClose) &&
+          typeof (r as { actualClose?: unknown }).actualClose === "number" &&
+          Number.isFinite((r as { actualClose: number }).actualClose)
+      )
+    : [];
 
   const csvPath = forecastRequest ? `${forecastRequest.symbol}/predicted.csv` : "";
   const predictedCsvUri = csvPath ? `${env.VITE_SERVER_URL}/api/csv?path=${encodeURIComponent(csvPath)}` : "";
@@ -327,7 +504,8 @@ export function StockAnalyzer() {
     }
     return rows;
   }, [csvQuery.data]);
-  const predictions: PredictionPoint[] = predictionsFromCsv.length > 0 ? predictionsFromCsv : apiPredictions;
+  // Use prediction run result (API) for graph and summary; CSV only as fallback (e.g. after refresh).
+  const predictions: PredictionPoint[] = apiPredictions.length > 0 ? apiPredictions : predictionsFromCsv;
 
   const hasPredictions = forecastRequest && !predictionQuery.isLoading && predictions.length > 0;
   const hasHistory = history.length > 0;
@@ -335,24 +513,37 @@ export function StockAnalyzer() {
 
   const actualByDate = useMemo(() => new Map(history.map((d) => [toDateStr(d.date), d.close])), [history]);
   const comparisonRows = useMemo(() => {
-    return predictions
-      .map((p) => {
-        const actual = actualByDate.get(toDateStr(p.date)) ?? null;
-        return { date: p.date, predicted: p.predictedClose, actual };
-      })
-      .filter((r): r is { date: string; predicted: number; actual: number } => r.actual != null);
-  }, [predictions, actualByDate]);
+    let rows: { date: string; predicted: number; actual: number }[];
+    if (apiComparisonRows.length > 0) {
+      rows = apiComparisonRows.map((r) => ({
+        date: r.date,
+        predicted: r.predictedClose,
+        actual: r.actualClose,
+      }));
+    } else {
+      rows = predictions
+        .map((p) => {
+          const actual = actualByDate.get(toDateStr(p.date)) ?? null;
+          return { date: p.date, predicted: p.predictedClose, actual };
+        })
+        .filter((r): r is { date: string; predicted: number; actual: number } => r.actual != null);
+    }
+    return rows.sort((a, b) => toDateStr(a.date).localeCompare(toDateStr(b.date)));
+  }, [apiComparisonRows, predictions, actualByDate]);
   const { overallAccuracy, directionalAccuracy, rmse } = useMemo(() => {
     if (comparisonRows.length < 2) {
       return {
-        overallAccuracy: accuracy ? 100 - accuracy.mape : null,
+        overallAccuracy: accuracy != null && Number.isFinite(accuracy.mape) ? 100 - accuracy.mape : null,
         directionalAccuracy: null as number | null,
         rmse: null as number | null,
       };
     }
     const n = comparisonRows.length;
-    const errors = comparisonRows.map((r) => (r.actual - r.predicted) / r.actual);
-    const meanAbsPct = (errors.reduce((s, e) => s + Math.abs(e), 0) / n) * 100;
+    const errors = comparisonRows.map((r) =>
+      r.actual !== 0 && Number.isFinite(r.actual) ? (r.actual - r.predicted) / r.actual : 0
+    );
+    const validErrors = errors.filter((e) => Number.isFinite(e));
+    const meanAbsPct = validErrors.length > 0 ? (validErrors.reduce((s, e) => s + Math.abs(e), 0) / validErrors.length) * 100 : 0;
     let directional = 0;
     for (let i = 1; i < n; i++) {
       const actDir = Math.sign(comparisonRows[i].actual - comparisonRows[i - 1].actual);
@@ -361,10 +552,12 @@ export function StockAnalyzer() {
     }
     const sqErrors = comparisonRows.map((r) => (r.actual - r.predicted) ** 2);
     const rmseVal = Math.sqrt(sqErrors.reduce((a, b) => a + b, 0) / n);
+    const overall = 100 - meanAbsPct;
+    const dirPct = n > 1 ? (directional / (n - 1)) * 100 : null;
     return {
-      overallAccuracy: 100 - meanAbsPct,
-      directionalAccuracy: (directional / (n - 1)) * 100,
-      rmse: rmseVal,
+      overallAccuracy: Number.isFinite(overall) ? Math.max(0, Math.min(100, overall)) : null,
+      directionalAccuracy: dirPct != null && Number.isFinite(dirPct) ? dirPct : null,
+      rmse: Number.isFinite(rmseVal) ? rmseVal : null,
     };
   }, [comparisonRows, accuracy]);
 
@@ -374,9 +567,44 @@ export function StockAnalyzer() {
   const currentPrice =
     scrapedRow?.price ??
     (history.length > 0 ? history[history.length - 1].close : predictions[0]?.predictedClose ?? null);
-  console.log("Render StockAnalyzer", { forecastRequest, history, predictions, accuracy, currentPrice });
-  console.log("Data status", dataStatus);
-  console.log("Available stock options", stockOptions);
+
+  useEffect(() => {
+    if (predictionQuery.isError) {
+      console.error("[StockAnalyzer] Prediction failed:", predictionQuery.error?.message ?? predictionQuery.error);
+    }
+    if (predictionQuery.isSuccess && forecastRequest) {
+      const ok = predictionQuery.data?.ok;
+      if (!ok) {
+        console.error("[StockAnalyzer] Prediction returned not ok:", (predictionQuery.data as { error?: string })?.error);
+      } else if (accuracy == null) {
+        console.warn("[StockAnalyzer] Prediction succeeded but accuracy is null (backtest may have been skipped).", {
+          symbol: forecastRequest.symbol,
+          predictionsCount: apiPredictions.length,
+        });
+      }
+      if (ok && apiComparisonRows.length === 0) {
+        const raw = (predictionQuery.data as { comparison?: unknown[] }).comparison;
+        console.warn("[StockAnalyzer] No comparison rows from API.", {
+          symbol: forecastRequest.symbol,
+          rawComparisonLength: Array.isArray(raw) ? raw.length : 0,
+          rawComparisonSample: Array.isArray(raw) ? raw[0] : raw,
+        });
+      }
+    }
+  }, [predictionQuery.isError, predictionQuery.isSuccess, predictionQuery.data, predictionQuery.error, forecastRequest, accuracy, apiPredictions.length, apiComparisonRows.length]);
+
+  useEffect(() => {
+    if (csvQuery.isError) {
+      console.error("[StockAnalyzer] Predicted CSV fetch failed:", csvQuery.error?.message ?? csvQuery.error);
+    }
+  }, [csvQuery.isError, csvQuery.error]);
+
+  useEffect(() => {
+    if (historyQuery.isError && normalizedSymbol) {
+      console.error("[StockAnalyzer] History fetch failed for", normalizedSymbol, ":", historyQuery.error?.message ?? historyQuery.error);
+    }
+  }, [historyQuery.isError, historyQuery.error, normalizedSymbol]);
+
   return (
     <div className="w-full space-y-6">
       <Card className="rounded-lg border bg-card">
@@ -441,7 +669,12 @@ export function StockAnalyzer() {
               <Button
                 type="button"
                 disabled={!normalizedSymbol || historyLoading || predictionQuery.isLoading}
-                onClick={() => normalizedSymbol && setForecastRequest({ symbol: normalizedSymbol, days: forecastDays })}
+                onClick={() => {
+                  if (!normalizedSymbol) return;
+                  console.log("[StockAnalyzer] Analyze clicked:", { symbol: normalizedSymbol, forecastDays });
+                  queryClient.refetchQueries(trpc.getStockHistory.queryOptions({ symbol: normalizedSymbol }));
+                  setForecastRequest({ symbol: normalizedSymbol, days: forecastDays });
+                }}
                 className="w-full gap-2"
               >
                 {predictionQuery.isLoading ? (
@@ -486,7 +719,7 @@ export function StockAnalyzer() {
             <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
             <p className="text-sm font-medium">Running prediction…</p>
             <p className="text-xs text-muted-foreground">
-              Populating details from predicted CSV for comparison. Results will appear below.
+              Analyzing history, generating forecast, then loading results on the graph.
             </p>
           </CardContent>
         </Card>
@@ -531,29 +764,81 @@ export function StockAnalyzer() {
             </Card>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                variant={mirrorOverlay ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setMirrorOverlay(!mirrorOverlay)}
-              >
-                Mirror Overlay
-              </Button>
-              <Button
-                type="button"
-                variant={confidenceBands ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setConfidenceBands(!confidenceBands)}
-              >
-                Confidence Bands
-              </Button>
-            </div>
-            <Button type="button" variant="outline" size="sm" className="text-muted-foreground">
-              Comparing
-            </Button>
-          </div>
+          <Card className="rounded-lg border bg-card">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-6">
+                <div className="flex items-center gap-3">
+                  <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div>
+                    <span className="text-sm font-medium block">Mirror Overlay</span>
+                    <span className="text-xs text-muted-foreground">Predicted + Actual Future lines</span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={mirrorOverlay}
+                    onClick={() => setMirrorOverlay(!mirrorOverlay)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                      mirrorOverlay ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                        mirrorOverlay ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div>
+                    <span className="text-sm font-medium block">Confidence Bands</span>
+                    <span className="text-xs text-muted-foreground">Upper/Lower bounds + shaded area</span>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={confidenceBands}
+                    onClick={() => setConfidenceBands(!confidenceBands)}
+                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                      confidenceBands ? "bg-primary" : "bg-muted"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                        confidenceBands ? "translate-x-5" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  disabled={compareLoading}
+                  onClick={() => {
+                    setCompareLoading(true);
+                    setMirrorOverlay(true);
+                    setConfidenceBands(true);
+                    setDataTab("comparison");
+                    comparisonResultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    requestAnimationFrame(() => {
+                      setTimeout(() => setCompareLoading(false), 400);
+                    });
+                  }}
+                >
+                  {compareLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Target className="h-4 w-4" />
+                  )}
+                  Compare
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {hasResults ? (
             <AnalyzeChartRecharts
@@ -565,6 +850,7 @@ export function StockAnalyzer() {
               accuracy={accuracy}
               showConfidenceBands={confidenceBands}
               showMirrorOverlay={mirrorOverlay}
+              comparisonRows={comparisonRows}
             />
           ) : (
             <Card className="rounded-lg border border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
@@ -578,7 +864,8 @@ export function StockAnalyzer() {
         </>
       )}
 
-      {(accuracy != null || comparisonRows.length > 0) && (
+      {(accuracy != null || comparisonRows.length > 0 || (forecastRequest && !predictionQuery.isLoading && predictions.length > 0)) && (
+        <div ref={comparisonResultRef}>
         <Card className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20">
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -586,52 +873,58 @@ export function StockAnalyzer() {
               Prediction Accuracy Analysis
             </CardTitle>
             <CardDescription>
-              {accuracy != null
-                ? `Backtest: comparing predicted vs actual on last ${accuracy.backtestDays} days`
-                : "Comparing predicted vs actual when history overlaps forecast period"}
+              Comparing predicted values against actual market data
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               <div className="rounded-lg border bg-background p-3">
                 <p className="text-xs text-muted-foreground">Overall Accuracy</p>
-                <p className="text-xl font-bold">
-                  {overallAccuracy != null ? `${Math.max(0, overallAccuracy).toFixed(2)}%` : "—"}
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-500">
+                  {overallAccuracy != null && Number.isFinite(overallAccuracy) ? `${Math.max(0, Math.min(100, overallAccuracy)).toFixed(2)}%` : "—"}
                 </p>
                 {(overallAccuracy != null && overallAccuracy >= 95) && (
-                  <span className="text-xs font-medium text-emerald-600">Excellent</span>
+                  <span className="mt-1 inline-block rounded bg-foreground px-2 py-0.5 text-xs font-medium text-background">Excellent</span>
                 )}
               </div>
               <div className="rounded-lg border bg-background p-3">
                 <p className="text-xs text-muted-foreground">Directional Accuracy</p>
                 <p className="text-xl font-bold">
-                  {directionalAccuracy != null ? `${directionalAccuracy.toFixed(1)}%` : "—"}
+                  {directionalAccuracy != null && Number.isFinite(directionalAccuracy) ? `${Math.max(0, Math.min(100, directionalAccuracy)).toFixed(1)}%` : "—"}
                 </p>
                 <p className="text-xs text-muted-foreground">Correct trend predictions</p>
               </div>
               <div className="rounded-lg border bg-background p-3">
                 <p className="text-xs text-muted-foreground">MAPE</p>
                 <p className="text-xl font-bold">
-                  {accuracy != null ? `${accuracy.mape.toFixed(2)}%` : overallAccuracy != null ? `${(100 - overallAccuracy).toFixed(2)}%` : "—"}
+                  {accuracy != null && Number.isFinite(accuracy.mape)
+                    ? `${accuracy.mape.toFixed(2)}%`
+                    : overallAccuracy != null && Number.isFinite(overallAccuracy)
+                      ? `${(100 - overallAccuracy).toFixed(2)}%`
+                      : "—"}
                 </p>
+                <p className="text-xs text-muted-foreground">Mean Absolute % Error</p>
               </div>
               <div className="rounded-lg border bg-background p-3">
                 <p className="text-xs text-muted-foreground">RMSE</p>
-                <p className="text-xl font-bold">{rmse != null ? `$${rmse.toFixed(2)}` : "—"}</p>
+                <p className="text-xl font-bold">{rmse != null && Number.isFinite(rmse) ? `$${rmse.toFixed(2)}` : "—"}</p>
+                <p className="text-xs text-muted-foreground">Root Mean Square Error</p>
               </div>
             </div>
-            <div className="rounded-lg border bg-background p-3">
+            <div className="mb-4 rounded-lg border bg-background p-3">
               <h4 className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                <AlertCircle className="h-4 w-4" />
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400">
+                  <Info className="h-3.5 w-3.5" />
+                </span>
                 Prediction Quality Feedback
               </h4>
-              {(accuracy?.mape ?? (overallAccuracy != null ? 100 - overallAccuracy : 99)) <= 5 ? (
+              {(Number.isFinite(accuracy?.mape) ? accuracy!.mape : (overallAccuracy != null && Number.isFinite(overallAccuracy) ? 100 - overallAccuracy : 99)) <= 5 ? (
                 <p className="text-sm text-muted-foreground">
-                  <span className="font-medium text-emerald-600">Excellent prediction accuracy!</span> The model closely
-                  mirrored actual market movements. This high accuracy suggests the model parameters are well-tuned.
-                  Consider using these predictions with higher confidence for future decisions.
+                  <span className="font-medium text-emerald-600 dark:text-emerald-400">Excellent prediction accuracy!</span> The model closely
+                  mirrored actual market movements. This high accuracy suggests the model parameters are well-tuned for{" "}
+                  <strong>{forecastRequest?.symbol ?? "this symbol"}</strong>. Consider using these predictions with higher confidence for future decisions.
                 </p>
-              ) : (accuracy?.mape ?? 10) <= 15 ? (
+              ) : (Number.isFinite(accuracy?.mape) ? accuracy!.mape : 10) <= 15 ? (
                 <p className="text-sm text-muted-foreground">
                   <span className="font-medium text-amber-600">Good prediction accuracy.</span> The model captured general
                   trends with some deviation. Consider wider margins for risk management.
@@ -643,128 +936,155 @@ export function StockAnalyzer() {
                 </p>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {comparisonRows.length > 0 && (
-        <Card className="rounded-lg border bg-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Prediction vs Actual Comparison</CardTitle>
-            <CardDescription>Side-by-side comparison of predicted and actual values.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[280px] overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card">
-                  <tr className="border-b">
-                    <th className="p-2 text-left">Date</th>
-                    <th className="p-2 text-right">Predicted</th>
-                    <th className="p-2 text-right">Actual</th>
-                    <th className="p-2 text-right">Difference</th>
-                    <th className="p-2 text-right">Error %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisonRows.map((r) => {
-                    const diff = r.actual - r.predicted;
-                    const errorPct = r.predicted !== 0 ? (diff / r.predicted) * 100 : 0;
-                    return (
-                      <tr key={r.date} className="border-b">
-                        <td className="p-2">{new Date(r.date).toLocaleDateString()}</td>
-                        <td className="p-2 text-right">${r.predicted.toFixed(2)}</td>
-                        <td className="p-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">${r.actual.toFixed(2)}</td>
-                        <td className={`p-2 text-right ${diff >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                          {diff >= 0 ? "+" : ""}${diff.toFixed(2)}
-                        </td>
-                        <td className={`p-2 text-right ${errorPct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                          {errorPct >= 0 ? "+" : ""}{errorPct.toFixed(2)}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {forecastRequest && !predictionQuery.isLoading && predictions.length > 0 && (
-        <Card className="rounded-lg border bg-card">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base">Predicted values (compare below)</CardTitle>
-                <CardDescription>
-                Generated prediction data for the next {forecastDays} days — use the chart and accuracy section to compare.
-                {predictionsFromCsv.length > 0 && (
-                  <span className="block mt-1 text-emerald-600 dark:text-emerald-400">Data loaded from predicted CSV and posted on this page.</span>
+            {forecastRequest && predictions.length > 0 && (
+              <>
+                <div className="flex gap-0 rounded-full bg-muted p-0.5 w-fit mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setDataTab("predicted")}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      dataTab === "predicted"
+                        ? "bg-white text-foreground shadow-sm dark:bg-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Predicted Data
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDataTab("comparison")}
+                    className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                      dataTab === "comparison"
+                        ? "bg-white text-foreground shadow-sm dark:bg-background"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Comparison Data
+                  </button>
+                </div>
+                <h4 className="text-sm font-semibold mb-2">Prediction vs Actual Comparison</h4>
+                {dataTab === "predicted" && (
+                  <>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <p className="text-xs text-muted-foreground">
+                        Generated prediction data for the next {forecastDays} days.
+                        {predictionsFromCsv.length > 0 && (
+                          <span className="block mt-1 text-emerald-600 dark:text-emerald-400">Data loaded from predicted CSV.</span>
+                        )}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 shrink-0"
+                        onClick={() => {
+                          const boundPct = accuracy?.mape != null && Number.isFinite(accuracy.mape) ? accuracy.mape : 2.5;
+                          const band = boundPct / 100;
+                          const header = "Date,Predicted_Close,Upper_Bound,Lower_Bound";
+                          const rows = predictions.map((p) => {
+                            const pred = p.predictedClose;
+                            const upper = (pred * (1 + band)).toFixed(4);
+                            const lower = (pred * (1 - band)).toFixed(4);
+                            return `${p.date},${pred},${upper},${lower}`;
+                          });
+                          const csv = [header, ...rows].join("\n");
+                          const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${forecastRequest!.symbol}_predicted.csv`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        <Download className="h-4 w-4" />
+                        Download CSV
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2 flex flex-wrap items-center gap-2">
+                      <span className="font-medium">Predicted CSV URI:</span>
+                      <a href={predictedCsvUri} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
+                        {predictedCsvUri}
+                      </a>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        className="h-6 w-6 shrink-0"
+                        aria-label="Copy URI"
+                        onClick={() => navigator.clipboard.writeText(predictedCsvUri)}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </p>
+                    <div className="max-h-[220px] overflow-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-card">
+                          <tr className="border-b">
+                            <th className="p-2 text-left">Date</th>
+                            <th className="p-2 text-right">Predicted close</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {predictions.map((p) => (
+                            <tr key={p.date} className="border-b">
+                              <td className="p-2">{new Date(p.date).toLocaleDateString()}</td>
+                              <td className="p-2 text-right font-medium">${p.predictedClose.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
-              </CardDescription>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-2 shrink-0"
-                onClick={() => {
-                  const header = "Date,Predicted_Close";
-                  const rows = predictions.map((p) => `${p.date},${p.predictedClose}`);
-                  const csv = [header, ...rows].join("\n");
-                  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = `${forecastRequest!.symbol}_predicted.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-                }}
-              >
-                <Download className="h-4 w-4" />
-                Download CSV
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 flex flex-wrap items-center gap-2">
-              <span className="font-medium">Predicted CSV URI:</span>
-              <a href={predictedCsvUri} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
-                {predictedCsvUri}
-              </a>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="h-6 w-6 shrink-0"
-                aria-label="Copy URI"
-                onClick={() => {
-                  navigator.clipboard.writeText(predictedCsvUri);
-                }}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="max-h-[220px] overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card">
-                  <tr className="border-b">
-                    <th className="p-2 text-left">Date</th>
-                    <th className="p-2 text-right">Predicted close</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {predictions.map((p) => (
-                    <tr key={p.date} className="border-b">
-                      <td className="p-2">{new Date(p.date).toLocaleDateString()}</td>
-                      <td className="p-2 text-right font-medium">${p.predictedClose.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                {dataTab === "comparison" && (
+                  <>
+                    {comparisonRows.length > 0 ? (
+                      <div className="max-h-[280px] overflow-auto">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-card">
+                            <tr className="border-b">
+                              <th className="p-2 text-left">Date</th>
+                              <th className="p-2 text-right">Predicted</th>
+                              <th className="p-2 text-right">Actual</th>
+                              <th className="p-2 text-right">Difference</th>
+                              <th className="p-2 text-right">Error %</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comparisonRows.map((r) => {
+                              const diff = r.actual - r.predicted;
+                              const errorPct = r.predicted !== 0 && Number.isFinite(r.predicted) ? (diff / r.predicted) * 100 : 0;
+                              return (
+                                <tr key={r.date} className="border-b">
+                                  <td className="p-2">{new Date(r.date).toLocaleDateString()}</td>
+                                  <td className="p-2 text-right">${r.predicted.toFixed(2)}</td>
+                                  <td className="p-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">${r.actual.toFixed(2)}</td>
+                                  <td className={`p-2 text-right ${diff >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                                    {diff >= 0 ? "+" : ""}${diff.toFixed(2)}
+                                  </td>
+                                  <td className={`p-2 text-right ${Number.isFinite(errorPct) ? (errorPct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400") : ""}`}>
+                                    {Number.isFinite(errorPct) ? `${errorPct >= 0 ? "+" : ""}${errorPct.toFixed(2)}%` : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-4">
+                        No comparison data yet. When historical data overlaps the forecast period, actual vs predicted rows will appear here.
+                      </p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
           </CardContent>
         </Card>
+        </div>
       )}
 
       {forecastRequest &&
@@ -776,29 +1096,6 @@ export function StockAnalyzer() {
             server/scripts/yahoo_top_100_output.
           </p>
         )}
-
-      {dataStatus && (
-        <Card className="rounded-lg border border-muted bg-muted/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Stored data status (troubleshooting)</CardTitle>
-            <CardDescription>
-              What the server sees. If the dropdown is empty or wrong, check these.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-xs space-y-1.5 font-mono">
-            <p><span className="text-muted-foreground">Server cwd:</span> {dataStatus.cwd}</p>
-            <p><span className="text-muted-foreground">Data directory:</span> {dataStatus.outputDir}</p>
-            <p><span className="text-muted-foreground">Summary file exists:</span> {dataStatus.summaryExists ? "Yes" : "No"}</p>
-            <p><span className="text-muted-foreground">History files (*_history.csv):</span> {dataStatus.historyCount}</p>
-            {dataStatus.sampleSymbols.length > 0 && (
-              <p><span className="text-muted-foreground">Sample symbols:</span> {dataStatus.sampleSymbols.join(", ")}</p>
-            )}
-            {dataStatus.hint && (
-              <p className="text-amber-600 dark:text-amber-400 mt-2">{dataStatus.hint}</p>
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

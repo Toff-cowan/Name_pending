@@ -54,8 +54,7 @@ function findYahooOutputDir(): string {
       path.join(cwd, "scripts", "yahoo_top_100_output"),
       path.join(cwd, "server", "scripts", "yahoo_top_100_output"),
       path.join(cwd, "Name_Pending", "server", "scripts", "yahoo_top_100_output"),
-      path.join(__dirname, "..", "..", "..", "..", "server", "scripts", "yahoo_top_100_output"),
-      path.join(__dirname, "..", "..", "..", "..", "Name_Pending", "server", "scripts", "yahoo_top_100_output"),
+      path.join(cwd, "Name_pending", "server", "scripts", "yahoo_top_100_output"),
     ];
     // Prefer a directory that actually has our data (summary or history CSVs)
     for (const p of candidates) {
@@ -304,6 +303,12 @@ export type PredictionAccuracy = {
   backtestDays: number;
 };
 
+export type PredictionComparisonRow = {
+  date: string;
+  predictedClose: number;
+  actualClose: number;
+};
+
 function findNewsScraperScript(): string | null {
   const cwd = process.cwd();
   const candidates = [
@@ -322,33 +327,42 @@ function findPredictScript(): string | null {
     path.join(cwd, "scripts", "predict_stock.py"),
     path.join(cwd, "server", "scripts", "predict_stock.py"),
     path.join(cwd, "Name_Pending", "server", "scripts", "predict_stock.py"),
-    path.join(__dirname, "..", "..", "..", "..", "server", "scripts", "predict_stock.py"),
-    path.join(__dirname, "..", "..", "..", "..", "Name_Pending", "server", "scripts", "predict_stock.py"),
+    path.join(cwd, "Name_pending", "server", "scripts", "predict_stock.py"),
   ];
   for (const p of candidates) {
     const resolved = path.resolve(p);
     if (fs.existsSync(resolved)) return resolved;
   }
+  console.error("[findPredictScript] Script not found. cwd:", cwd, "tried:", candidates.map((p) => path.resolve(p)));
   return null;
 }
 
 function runStockPredict(
   ticker: string,
   forecastDays: number
-): Promise<{ predictions: PredictionPoint[]; accuracy: PredictionAccuracy | null; error?: string }> {
+): Promise<{
+  predictions: PredictionPoint[];
+  accuracy: PredictionAccuracy | null;
+  comparison: PredictionComparisonRow[];
+  error?: string;
+}> {
   return new Promise((resolve) => {
     const scriptPath = findPredictScript();
     if (!scriptPath) {
       resolve({
         predictions: [],
         accuracy: null,
-        error: "Prediction script not found. Looked for predict_stock.py in scripts/ and server/scripts/.",
+        comparison: [],
+        error: "Prediction script not found. Looked for predict_stock.py in scripts/ and server/scripts/. Run the server from the project root. See server console for paths tried.",
       });
       return;
     }
-    const py = process.platform === "win32" ? "python" : "python3";
-    const proc = child_process.spawn(py, [scriptPath, ticker, String(forecastDays)], {
-      cwd: path.dirname(path.dirname(scriptPath)),
+    const cwd = path.dirname(path.dirname(scriptPath));
+    const pyCommand = process.platform === "win32" ? "py" : "python3";
+    const pyFallback = process.platform === "win32" ? "python" : "python3";
+    console.log("[runStockPredict] Running Python script:", { scriptPath, cwd, ticker, forecastDays, py: pyCommand });
+    const proc = child_process.spawn(pyCommand, [scriptPath, ticker, String(forecastDays)], {
+      cwd,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -360,9 +374,56 @@ function runStockPredict(
       stderr += chunk.toString("utf-8");
     });
     proc.on("error", (err) => {
+      if (process.platform === "win32" && pyCommand === "py") {
+        console.warn("[runStockPredict] 'py' failed, trying 'python':", err.message);
+        const proc2 = child_process.spawn(pyFallback, [scriptPath, ticker, String(forecastDays)], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+        let out2 = "";
+        let err2 = "";
+        proc2.stdout?.on("data", (ch: Buffer) => { out2 += ch.toString("utf-8"); });
+        proc2.stderr?.on("data", (ch: Buffer) => { err2 += ch.toString("utf-8"); });
+        proc2.on("error", (e2) => {
+          console.error("[runStockPredict] 'python' also failed:", e2.message);
+          resolve({ predictions: [], accuracy: null, comparison: [], error: `Failed to run Python: ${e2.message}. Install Python and ensure 'python' or 'py' is in PATH.` });
+        });
+        proc2.on("close", (code2) => {
+          if (code2 !== 0) {
+            try {
+              const errJson = JSON.parse(err2.trim()) as { error?: string };
+              resolve({ predictions: [], accuracy: null, comparison: [], error: errJson.error ?? err2.trim() });
+            } catch {
+              resolve({ predictions: [], accuracy: null, comparison: [], error: err2.trim() || `Script exited with code ${code2}` });
+            }
+            return;
+          }
+          try {
+            const raw = out2.replace(/^\uFEFF/, "").trim();
+            let parsed: unknown;
+            try { parsed = JSON.parse(raw); } catch { const s = raw.indexOf("{"); const e = raw.lastIndexOf("}") + 1; parsed = s >= 0 && e > s ? JSON.parse(raw.slice(s, e)) : {}; }
+            const obj = parsed as { predictions?: unknown[]; accuracy?: unknown; comparison?: unknown[] };
+            const preds = (Array.isArray(obj?.predictions) ? obj.predictions : []).filter((x): x is PredictionPoint => x != null && typeof x === "object" && typeof (x as PredictionPoint).date === "string" && typeof (x as PredictionPoint).predictedClose === "number");
+            let acc: PredictionAccuracy | null = null;
+            const a = obj?.accuracy;
+            if (a != null && typeof a === "object" && typeof (a as PredictionAccuracy).mae === "number" && typeof (a as PredictionAccuracy).mape === "number" && typeof (a as PredictionAccuracy).backtestDays === "number") acc = a as PredictionAccuracy;
+            let comp: PredictionComparisonRow[] = [];
+            const c = obj?.comparison;
+            if (Array.isArray(c)) {
+              comp = c.filter((x): x is PredictionComparisonRow => {
+                if (x == null || typeof x !== "object") return false;
+                const row = x as Record<string, unknown>;
+                return typeof row.date === "string" && (row.date as string).length > 0 && typeof row.predictedClose === "number" && Number.isFinite(row.predictedClose) && typeof row.actualClose === "number" && Number.isFinite(row.actualClose);
+              });
+            }
+            resolve({ predictions: preds, accuracy: acc, comparison: comp });
+          } catch {
+            resolve({ predictions: [], accuracy: null, comparison: [], error: "Invalid JSON from prediction script." });
+          }
+        });
+        return;
+      }
       resolve({
         predictions: [],
         accuracy: null,
+        comparison: [],
         error: `Failed to run Python: ${err.message}. Is Python installed?`,
       });
     });
@@ -378,18 +439,28 @@ function runStockPredict(
           resolve({
             predictions: [],
             accuracy: null,
+            comparison: [],
             error: errJson.error ?? pickError(),
           });
           return;
         } catch {
-          resolve({ predictions: [], accuracy: null, error: pickError() });
+          resolve({ predictions: [], accuracy: null, comparison: [], error: pickError() });
           return;
         }
       }
       try {
-        const parsed = JSON.parse(stdout.trim()) as unknown;
+        const raw = stdout.replace(/^\uFEFF/, "").trim();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          const start = raw.indexOf("{");
+          const end = raw.lastIndexOf("}") + 1;
+          parsed = start >= 0 && end > start ? JSON.parse(raw.slice(start, end)) : {};
+        }
         let predictions: PredictionPoint[] = [];
         let accuracy: PredictionAccuracy | null = null;
+        let comparison: PredictionComparisonRow[] = [];
         if (Array.isArray(parsed)) {
           predictions = (parsed as unknown[]).filter(
             (x): x is PredictionPoint =>
@@ -399,7 +470,7 @@ function runStockPredict(
               typeof (x as PredictionPoint).predictedClose === "number"
           );
         } else if (parsed != null && typeof parsed === "object" && Array.isArray((parsed as { predictions?: unknown }).predictions)) {
-          const obj = parsed as { predictions: unknown[]; accuracy?: unknown };
+          const obj = parsed as { predictions: unknown[]; accuracy?: unknown; comparison?: unknown[] };
           predictions = obj.predictions.filter(
             (x): x is PredictionPoint =>
               x != null &&
@@ -417,22 +488,36 @@ function runStockPredict(
           ) {
             accuracy = acc as PredictionAccuracy;
           }
+          const comp = obj.comparison;
+          if (Array.isArray(comp)) {
+            comparison = comp.filter(
+              (x): x is PredictionComparisonRow => {
+                if (x == null || typeof x !== "object") return false;
+                const row = x as Record<string, unknown>;
+                const date = row.date;
+                const pred = row.predictedClose;
+                const actual = row.actualClose;
+                return typeof date === "string" && date.length > 0 && typeof pred === "number" && Number.isFinite(pred) && typeof actual === "number" && Number.isFinite(actual);
+              }
+            );
+          }
         }
         if (predictions.length === 0 && stderr.trim()) {
           try {
             const errJson = JSON.parse(stderr.trim()) as { error?: string };
-            resolve({ predictions, accuracy, error: errJson.error });
+            resolve({ predictions, accuracy, comparison, error: errJson.error });
             return;
           } catch {
-            resolve({ predictions, accuracy, error: stderr.trim() });
+            resolve({ predictions, accuracy, comparison, error: stderr.trim() });
             return;
           }
         }
-        resolve({ predictions, accuracy });
+        resolve({ predictions, accuracy, comparison });
       } catch {
         resolve({
           predictions: [],
           accuracy: null,
+          comparison: [],
           error: stderr.trim() || "Invalid JSON from prediction script.",
         });
       }
@@ -502,47 +587,6 @@ function getAvailableHistorySymbols(): string[] {
 export const appRouter = router({
   healthCheck: publicProcedure.query(() => {
     return "OK";
-  }),
-  /** Diagnostic: what path the server is using and whether data files exist. Call from browser or API client to debug "data not listing". */
-  getDataStatus: publicProcedure.query(() => {
-    try {
-      const cwd = process.cwd();
-      const outputDir = getOutputDir();
-      const summaryPath = getSummaryPath();
-      const summaryExists = fs.existsSync(summaryPath);
-      let historyCount = 0;
-      let sampleSymbols: string[] = [];
-      try {
-        if (fs.existsSync(outputDir)) {
-          const entries = fs.readdirSync(outputDir);
-          historyCount = entries.filter((e) => e.endsWith("_history.csv")).length;
-          sampleSymbols = getAvailableHistorySymbols().slice(0, 10);
-        }
-      } catch {
-        /* ignore */
-      }
-      return {
-        cwd,
-        outputDir,
-        summaryPath,
-        summaryExists,
-        historyCount,
-        sampleSymbols,
-        hint: !summaryExists && historyCount === 0
-          ? "Run the server from the repo root (or the folder that contains server/scripts/yahoo_top_100_output). Ensure top_100_summary.csv and *_history.csv exist there, or run the market scrape first."
-          : undefined,
-      };
-    } catch (err) {
-      return {
-        cwd: process.cwd(),
-        outputDir: "(failed to resolve)",
-        summaryPath: "(failed to resolve)",
-        summaryExists: false,
-        historyCount: 0,
-        sampleSymbols: [],
-        hint: err instanceof Error ? err.message : String(err),
-      };
-    }
   }),
   getAvailableSymbols: publicProcedure.query(async (): Promise<{ ok: true; symbols: string[] } | { ok: false; error: string }> => {
     try {
@@ -628,23 +672,30 @@ export const appRouter = router({
       async ({
         input,
       }): Promise<
-        | { ok: true; predictions: PredictionPoint[]; accuracy: PredictionAccuracy | null }
+        | { ok: true; predictions: PredictionPoint[]; accuracy: PredictionAccuracy | null; comparison: PredictionComparisonRow[] }
         | { ok: false; error: string }
       > => {
         try {
           const ticker = input.symbol.replace(/[^A-Z0-9\-]/gi, "").toUpperCase();
-          const { predictions, accuracy, error: scriptError } = await runStockPredict(
+          console.log("[getStockPrediction] Called:", { symbol: ticker, forecastDays: input.forecastDays });
+          const { predictions, accuracy, comparison, error: scriptError } = await runStockPredict(
             ticker,
             input.forecastDays
           );
           if (scriptError) {
+            console.error("[getStockPrediction] Script error:", scriptError, { symbol: ticker, forecastDays: input.forecastDays });
             return { ok: false, error: scriptError };
           }
-          return { ok: true, predictions, accuracy };
+          if ((comparison ?? []).length === 0 && predictions.length > 0) {
+            console.warn("[getStockPrediction] No comparison rows returned (backtest may have been skipped).", { symbol: ticker, predictionsCount: predictions.length, accuracy: accuracy != null ? "present" : "null" });
+          }
+          return { ok: true, predictions, accuracy, comparison: comparison ?? [] };
         } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error("[getStockPrediction] Error:", message, { symbol: input.symbol, forecastDays: input.forecastDays });
           return {
             ok: false,
-            error: err instanceof Error ? err.message : String(err),
+            error: message,
           };
         }
       }
