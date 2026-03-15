@@ -20,9 +20,10 @@ main::-webkit-scrollbar,
   display: none;
 }
 
+/* Stacked above chatbot: chatbot is bottom-6 (1.5rem) + h-14 (3.5rem) + gap */
 .back-to-top {
   position: fixed;
-  bottom: 1.5rem;
+  bottom: 5.5rem;
   right: 1.5rem;
   z-index: 40;
   display: flex;
