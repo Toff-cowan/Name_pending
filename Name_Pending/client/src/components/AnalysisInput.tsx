@@ -26,7 +26,8 @@ export function parseTickerFromInput(input: string): string | null {
 }
 
 export interface AnalysisInputProps {
-  onSubmit: (ticker: string) => void;
+  /** Called with parsed ticker and the raw user message (for chat display). */
+  onSubmit: (ticker: string, userMessage: string) => void;
   disabled?: boolean;
   placeholder?: string;
 }
@@ -50,7 +51,8 @@ export function AnalysisInput({
     // eslint-disable-next-line no-console
     console.log("[Lab] Parsed ticker", { rawInput: value, ticker });
     if (ticker) {
-      onSubmit(ticker);
+      const rawMessage = value.trim();
+      onSubmit(ticker, rawMessage || ticker);
       setValue("");
     }
   }, [value, disabled, onSubmit]);

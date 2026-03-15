@@ -1,7 +1,8 @@
 /**
  * Result card for the Lab: prediction badge, recommendation, confidence, rationale.
+ * Rationale sections use button toggles (no <details>) to avoid open/toggle glitches.
  */
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@pi/ui/components/card";
 import { Button } from "@pi/ui/components/button";
 import type {
@@ -10,7 +11,7 @@ import type {
   Recommendation,
 } from "@/types/stock";
 import { cn } from "@pi/ui/lib/utils";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 
 const PREDICTION_STYLES: Record<
   PredictionDirection,
@@ -54,13 +55,31 @@ export interface PredictionCardProps {
   onAnalyzeAnother: () => void;
 }
 
+type RationaleSectionKey = "summary" | "technical" | "fundamental" | "sentiment" | "risks";
+
+const RATIONALE_SECTIONS: { key: RationaleSectionKey; label: string }[] = [
+  { key: "summary", label: "Summary" },
+  { key: "technical", label: "Technical factors" },
+  { key: "fundamental", label: "Fundamental factors" },
+  { key: "sentiment", label: "Sentiment factors" },
+  { key: "risks", label: "Risks" },
+];
+
 export function PredictionCard({
   prediction,
   companyName,
   analyzedAt,
   onAnalyzeAnother,
 }: PredictionCardProps) {
-  const [openSection, setOpenSection] = useState<"summary" | "technical" | "fundamental" | "sentiment" | "risks">("summary");
+  const [openSections, setOpenSections] = useState<Set<RationaleSectionKey>>(new Set(["summary"]));
+  const toggleSection = useCallback((key: RationaleSectionKey) => {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   const styles = PREDICTION_STYLES[prediction.prediction];
   const recStyle = RECOMMENDATION_STYLES[prediction.recommendation];
 
@@ -126,65 +145,68 @@ export function PredictionCard({
           </p>
         </div>
 
-        <div className="border rounded-lg divide-y">
-          {(
-            [
-              ["summary", "Summary", "summary"],
-              ["technicalFactors", "Technical factors", "technical"],
-              ["fundamentalFactors", "Fundamental factors", "fundamental"],
-              ["sentimentFactors", "Sentiment factors", "sentiment"],
-              ["risks", "Risks", "risks"],
-            ] as const
-          ).map(([k, label, sectionKey]) => {
-              const content =
-                k === "summary"
-                  ? prediction.rationale.summary
-                  : Array.isArray(prediction.rationale[k])
-                    ? (prediction.rationale[k] as string[])
-                    : null;
-              const isRisks = k === "risks";
-              const isOpen = openSection === sectionKey;
-              return (
-                <details
-                  key={k}
-                  open={isOpen || k === "summary"}
-                  onToggle={() => setOpenSection(sectionKey)}
-                  className="group"
+        <div className="border rounded-lg divide-y overflow-hidden">
+          {RATIONALE_SECTIONS.map(({ key: sectionKey, label }) => {
+            const dataKey =
+              sectionKey === "summary"
+                ? "summary"
+                : sectionKey === "technical"
+                  ? "technicalFactors"
+                  : sectionKey === "fundamental"
+                    ? "fundamentalFactors"
+                    : sectionKey === "sentiment"
+                      ? "sentimentFactors"
+                      : "risks";
+            const content =
+              dataKey === "summary"
+                ? prediction.rationale.summary
+                : Array.isArray(prediction.rationale[dataKey as keyof typeof prediction.rationale])
+                  ? (prediction.rationale[dataKey as keyof typeof prediction.rationale] as string[])
+                  : null;
+            const isRisks = sectionKey === "risks";
+            const isOpen = openSections.has(sectionKey);
+            return (
+              <div key={sectionKey} className="border-b border-border last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => toggleSection(sectionKey)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-muted/50 transition-colors",
+                    "text-sm font-medium",
+                    isRisks && "text-amber-600 dark:text-amber-400"
+                  )}
                 >
-                  <summary className="list-none cursor-pointer px-4 py-3 hover:bg-muted/50 flex items-center justify-between">
-                    <span
-                      className={cn(
-                        "text-sm font-medium",
-                        isRisks && "text-amber-600 dark:text-amber-400"
-                      )}
-                    >
-                      {isRisks && (
-                        <AlertTriangle className="inline w-4 h-4 mr-2" />
-                      )}
-                      {label}
-                    </span>
-                  </summary>
+                  {isOpen ? (
+                    <ChevronDown className="h-4 w-4 shrink-0" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 shrink-0" />
+                  )}
+                  {isRisks && <AlertTriangle className="h-4 w-4 shrink-0" />}
+                  {label}
+                </button>
+                {isOpen && (
                   <div
                     className={cn(
-                      "px-4 pb-3 pt-0 text-sm",
+                      "px-4 pb-3 pt-0 text-sm border-t border-border/50",
                       isRisks && "text-amber-700 dark:text-amber-300"
                     )}
                   >
                     {typeof content === "string" ? (
-                      <p className="text-foreground/90">{content}</p>
+                      <p className="text-foreground/90 pt-2">{content}</p>
                     ) : Array.isArray(content) && content.length > 0 ? (
-                      <ul className="list-disc list-inside space-y-1">
+                      <ul className="list-disc list-inside space-y-1 pt-2">
                         {content.map((item, i) => (
                           <li key={i}>{item}</li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-muted-foreground">—</p>
+                      <p className="text-muted-foreground pt-2">—</p>
                     )}
                   </div>
-                </details>
-              );
-            })}
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <Button
