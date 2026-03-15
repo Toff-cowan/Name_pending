@@ -12,11 +12,11 @@
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@Name_Pending/ui/components",
-    "utils": "@Name_Pending/ui/lib/utils",
-    "hooks": "@Name_Pending/ui/hooks",
-    "lib": "@Name_Pending/ui/lib",
-    "ui": "@Name_Pending/ui/components"
+    "components": "@pi/ui/components",
+    "utils": "@pi/ui/lib/utils",
+    "hooks": "@pi/ui/hooks",
+    "lib": "@pi/ui/lib",
+    "ui": "@pi/ui/components"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

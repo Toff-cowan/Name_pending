@@ -1,5 +1,5 @@
 {
-  "name": "@Name_Pending/env",
+  "name": "@pi/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,7 +13,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@Name_Pending/config": "*",
+    "@pi/config": "*",
     "@types/node": "^22.13.14",
     "typescript": "^5"
   }

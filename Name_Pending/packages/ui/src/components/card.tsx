@@ -1,4 +1,4 @@
-import { cn } from "@Name_Pending/ui/lib/utils";
+import { cn } from "@pi/ui/lib/utils";
 import * as React from "react";
 
 function Card({

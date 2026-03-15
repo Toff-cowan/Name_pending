@@ -1,5 +1,5 @@
 {
-  "name": "Name_Pending",
+  "name": "pi",
   "private": true,
   "workspaces": [
     "client",
@@ -13,18 +13,18 @@
     "check-types": "npx turbo check-types",
     "dev:web": "npx turbo -F web dev",
     "dev:server": "npx turbo -F server dev",
-    "db:push": "npx turbo -F @Name_Pending/db db:push",
-    "db:studio": "npx turbo -F @Name_Pending/db db:studio",
-    "db:generate": "npx turbo -F @Name_Pending/db db:generate",
-    "db:migrate": "npx turbo -F @Name_Pending/db db:migrate"
+    "db:push": "npx turbo -F @pi/db db:push",
+    "db:studio": "npx turbo -F @pi/db db:studio",
+    "db:generate": "npx turbo -F @pi/db db:generate",
+    "db:migrate": "npx turbo -F @pi/db db:migrate"
   },
   "dependencies": {
-    "@Name_Pending/env": "*",
+    "@pi/env": "*",
     "dotenv": "^17.2.2",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@Name_Pending/config": "*",
+    "@pi/config": "*",
     "@types/node": "^22.13.14",
     "turbo": "^2.8.17",
     "typescript": "^5"

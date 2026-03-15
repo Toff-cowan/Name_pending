@@ -1,5 +1,5 @@
 {
-  "name": "@Name_Pending/db",
+  "name": "@pi/db",
   "type": "module",
   "exports": {
     ".": {
@@ -16,14 +16,14 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@Name_Pending/env": "*",
+    "@pi/env": "*",
     "dotenv": "^17.2.2",
     "drizzle-orm": "^0.45.1",
     "pg": "^8.17.1",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@Name_Pending/config": "*",
+    "@pi/config": "*",
     "@types/pg": "^8.16.0",
     "drizzle-kit": "^0.18.1",
     "typescript": "^5"

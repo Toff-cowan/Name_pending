@@ -1,11 +1,11 @@
 {
-  "extends": "@Name_Pending/config/tsconfig.base.json",
+  "extends": "@pi/config/tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "paths": {
-      "@Name_Pending/ui/*": ["./src/*"]
+      "@pi/ui/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

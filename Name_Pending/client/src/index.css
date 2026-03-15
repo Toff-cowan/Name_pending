@@ -1,6 +1,6 @@
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
-@import "@Name_Pending/ui/globals.css";
+@import "@pi/ui/globals.css";
 
 /* Hide scrollbars everywhere (main scroll is on main, not body) */
 html,

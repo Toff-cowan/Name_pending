@@ -11,9 +11,9 @@
     "scrape:jse": "python scripts/scrape_jamstockex.py"
   },
   "dependencies": {
-    "@Name_Pending/api": "*",
-    "@Name_Pending/db": "*",
-    "@Name_Pending/env": "*",
+    "@pi/api": "*",
+    "@pi/db": "*",
+    "@pi/env": "*",
     "@hono/trpc-server": "^0.4.0",
     "@trpc/server": "^11.7.2",
     "cors": "^2.8.5",
@@ -22,7 +22,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@Name_Pending/config": "*",
+    "@pi/config": "*",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^22.13.14",

@@ -11,12 +11,12 @@ import type {
   PredictionPoint,
   PredictionAccuracy,
   MarketRow,
-} from "@Name_Pending/api/routers/index";
+} from "@pi/api/routers/index";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/chart";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@Name_Pending/ui/components/card";
-import { Input } from "@Name_Pending/ui/components/input";
-import { Label } from "@Name_Pending/ui/components/label";
-import { Button } from "@Name_Pending/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@pi/ui/components/card";
+import { Input } from "@pi/ui/components/input";
+import { Label } from "@pi/ui/components/label";
+import { Button } from "@pi/ui/components/button";
 import {
   Select,
   SelectContent,
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/select";
-import { env } from "@Name_Pending/env/web";
+import { env } from "@pi/env/web";
 import { Target, BarChart3, CheckCircle2, Info, Layers, TrendingUp, TrendingDown, Loader2, Download, Copy } from "lucide-react";
 
 const FALLBACK_STOCK_OPTIONS = [

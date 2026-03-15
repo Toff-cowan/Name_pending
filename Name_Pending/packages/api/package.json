@@ -1,5 +1,5 @@
 {
-  "name": "@Name_Pending/api",
+  "name": "@pi/api",
   "type": "module",
   "exports": {
     ".": {
@@ -11,15 +11,15 @@
   },
   "scripts": {},
   "dependencies": {
-    "@Name_Pending/db": "*",
-    "@Name_Pending/env": "*",
+    "@pi/db": "*",
+    "@pi/env": "*",
     "@trpc/client": "^11.7.2",
     "@trpc/server": "^11.7.2",
     "dotenv": "^17.2.2",
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@Name_Pending/config": "*",
+    "@pi/config": "*",
     "@types/express": "^5.0.1",
     "typescript": "^5"
   }

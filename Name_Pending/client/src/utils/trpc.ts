@@ -1,5 +1,5 @@
-import type { AppRouter } from "@Name_Pending/api/routers/index";
-import { env } from "@Name_Pending/env/web";
+import type { AppRouter } from "@pi/api/routers/index";
+import { env } from "@pi/env/web";
 import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { createTRPCOptionsProxy } from "@trpc/tanstack-react-query";

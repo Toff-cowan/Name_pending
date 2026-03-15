@@ -1,3 +1,3 @@
 {
-  "extends": "@Name_Pending/config/tsconfig.base.json"
+  "extends": "@pi/config/tsconfig.base.json"
 }

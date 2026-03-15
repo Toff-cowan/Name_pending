@@ -1,4 +1,4 @@
-import { Toaster } from "@Name_Pending/ui/components/sonner";
+import { Toaster } from "@pi/ui/components/sonner";
 import { QueryClientProvider } from "@tanstack/react-query";
 
 import "./index.css";
